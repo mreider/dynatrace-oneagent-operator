@@ -20,6 +20,27 @@ func (s TokenScopes) Contains(scope string) bool {
 	return false
 }
 
+func (dc *dynatraceClient) CreatePaaSToken(token string) (string, error) {
+	var model struct {
+		Name   string   `json:"name"`
+		Scopes []string `json:"scopes"`
+	}
+	model.Name = "dynatrace-oneagent-operator-paas-token"
+	model.Scopes[0] = TokenScopeInstallerDownload
+
+	jsonStr, err := json.Marshal(model)
+	if err != nil {
+		return "", err
+	}
+
+	data, err := dc.tokenAPIRequest(token, "v1/tokens/createToken", jsonStr)
+	if err != nil {
+		return "", err
+	}
+
+	return dc.readResponseForTokenCreation(data)
+}
+
 func (dc *dynatraceClient) GetTokenScopes(token string) (TokenScopes, error) {
 	var model struct {
 		Token string `json:"token"`
@@ -31,20 +52,7 @@ func (dc *dynatraceClient) GetTokenScopes(token string) (TokenScopes, error) {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/v1/tokens/lookup", dc.url), bytes.NewBuffer(jsonStr))
-	if err != nil {
-		return nil, fmt.Errorf("error initialising http request: %w", err)
-	}
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Api-Token %s", token))
-
-	resp, err := dc.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error making post request to dynatrace api: %w", err)
-	}
-	defer resp.Body.Close()
-
-	data, err := dc.getServerResponseData(resp)
+	data, err := dc.tokenAPIRequest(token, "v1/tokens/lookup", jsonStr)
 	if err != nil {
 		return nil, err
 	}
@@ -62,4 +70,38 @@ func (dc *dynatraceClient) readResponseForTokenScopes(response []byte) (TokenSco
 	}
 
 	return jr.Scopes, nil
+}
+
+func (dc *dynatraceClient) tokenAPIRequest(token string, endpoint string, jsonStr []byte) ([]byte, error) {
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", dc.url, endpoint), bytes.NewBuffer(jsonStr))
+	if err != nil {
+		return nil, fmt.Errorf("error initialising http request: %w", err)
+	}
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Authorization", fmt.Sprintf("Api-Token %s", token))
+
+	resp, err := dc.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error making post request to dynatrace api: %w", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := dc.getServerResponseData(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
+}
+
+func (dc *dynatraceClient) readResponseForTokenCreation(response []byte) (string, error) {
+	var jr struct {
+		PaasToken string `json:"token"`
+	}
+
+	if err := json.Unmarshal(response, &jr); err != nil {
+		return "", fmt.Errorf("error unmarshalling json response: %w", err)
+	}
+
+	return jr.PaasToken, nil
 }

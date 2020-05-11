@@ -54,6 +54,9 @@ type Client interface {
 
 	// GetTokenScopes returns the list of scopes assigned to a token if successful.
 	GetTokenScopes(token string) (TokenScopes, error)
+
+	// CreatePaaSToken creates a PaaS token in case a user just provides an API token with the permission to create tokens
+	CreatePaaSToken(apitoken string) (string, error)
 }
 
 // Known OS values.

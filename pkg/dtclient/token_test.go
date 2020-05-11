@@ -9,6 +9,20 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func testCreatePaaSToken(t *testing.T, dynatraceClient Client) {
+	{
+		paasToken, err := dynatraceClient.CreatePaaSToken("good-token")
+		assert.NoError(t, err)
+		assert.Exactly(t, []string{"definitelyNotAToken"}, paasToken)
+	}
+	{
+		paasToken, err := dynatraceClient.CreatePaaSToken("bad-token")
+		assert.Nil(t, paasToken)
+		assert.Error(t, err)
+		assert.Exactly(t, ServerError{Code: 401, Message: "error received from server"}, err)
+	}
+}
+
 func testGetTokenScopes(t *testing.T, dynatraceClient Client) {
 	{
 		scopes, err := dynatraceClient.GetTokenScopes("good-token")

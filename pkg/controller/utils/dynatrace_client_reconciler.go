@@ -88,6 +88,65 @@ func (r *DynatraceClientReconciler) Reconcile(ctx context.Context, instance dyna
 
 	valid := true
 
+	dtc, err := dtf(r.Client, instance)
+	if err != nil {
+		message := fmt.Sprintf("Failed to create Dynatrace API Client: %s", err)
+
+		for _, t := range tokens {
+			updateCR = sts.Conditions.SetCondition(status.Condition{
+				Type:    t.Type,
+				Status:  corev1.ConditionFalse,
+				Reason:  dynatracev1alpha1.ReasonTokenError,
+				Message: message,
+			}) || updateCR
+		}
+
+		return nil, updateCR, err
+	}
+
+	if len(tokens) == 1 {
+		t := tokens[0]
+		if t.Type != DynatraceApiToken {
+			updateCR = sts.Conditions.SetCondition(status.Condition{
+				Type:    t.Type,
+				Status:  corev1.ConditionFalse,
+				Reason:  dynatracev1alpha1.ReasonTokenMissing,
+				Message: fmt.Sprintf("Token %s is not an APIToken", t.Key),
+			}) || updateCR
+			valid = false
+		}
+
+		v := secret.Data[t.Key]
+		if len(v) == 0 {
+			updateCR = sts.Conditions.SetCondition(status.Condition{
+				Type:    t.Type,
+				Status:  corev1.ConditionFalse,
+				Reason:  dynatracev1alpha1.ReasonTokenMissing,
+				Message: fmt.Sprintf("Token %s on secret %s missing", t.Key, secretKey),
+			}) || updateCR
+			valid = false
+		}
+		t.Value = string(v)
+
+		paasToken, err := dtc.CreatePaaSToken(t.Value)
+		var serr dtclient.ServerError
+		if ok := errors.As(err, &serr); ok && serr.Code == http.StatusUnauthorized {
+			sts.Conditions.SetCondition(status.Condition{
+				Type:    t.Type,
+				Status:  corev1.ConditionFalse,
+				Reason:  dynatracev1alpha1.ReasonTokenUnauthorized,
+				Message: fmt.Sprintf("Token on secret %s unauthorized", secretKey),
+			})
+		}
+		tokens = append(tokens, &tokenConfig{
+			Type:      dynatracev1alpha1.PaaSTokenConditionType,
+			Key:       paasToken,
+			Scope:     dtclient.TokenScopeInstallerDownload,
+			Timestamp: &sts.LastPaaSTokenProbeTimestamp,
+		})
+
+	}
+
 	for _, t := range tokens {
 		v := secret.Data[t.Key]
 		if len(v) == 0 {
@@ -104,22 +163,6 @@ func (r *DynatraceClientReconciler) Reconcile(ctx context.Context, instance dyna
 
 	if !valid {
 		return nil, updateCR, fmt.Errorf("issues found with tokens, see status")
-	}
-
-	dtc, err := dtf(r.Client, instance)
-	if err != nil {
-		message := fmt.Sprintf("Failed to create Dynatrace API Client: %s", err)
-
-		for _, t := range tokens {
-			updateCR = sts.Conditions.SetCondition(status.Condition{
-				Type:    t.Type,
-				Status:  corev1.ConditionFalse,
-				Reason:  dynatracev1alpha1.ReasonTokenError,
-				Message: message,
-			}) || updateCR
-		}
-
-		return nil, updateCR, err
 	}
 
 	for _, t := range tokens {

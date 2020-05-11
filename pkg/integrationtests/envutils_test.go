@@ -180,6 +180,7 @@ func mockDynatraceClientFunc(communicationHosts *[]string) utils.DynatraceClient
 		}, nil)
 		dtc.On("GetTokenScopes", "42").Return(dtclient.TokenScopes{dtclient.TokenScopeInstallerDownload}, nil)
 		dtc.On("GetTokenScopes", "43").Return(dtclient.TokenScopes{dtclient.TokenScopeDataExport}, nil)
+		dtc.On("CreatePaaSToken").Return("definitelyNotAToken", nil)
 
 		return dtc, nil
 	}
