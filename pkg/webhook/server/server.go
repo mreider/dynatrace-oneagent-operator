@@ -140,7 +140,7 @@ func (m *podInjector) Handle(ctx context.Context, req admission.Request) admissi
 
 	pod.Spec.InitContainers = append(pod.Spec.InitContainers, corev1.Container{
 		Name:    "install-oneagent",
-		Image:   m.image,
+		Image:   "gcr.io/cloud-platform-207208/oneagent-paas:latest",
 		Command: []string{"/usr/bin/env"},
 		Args:    []string{"bash", "/mnt/config/init.sh"},
 		Env: []corev1.EnvVar{
